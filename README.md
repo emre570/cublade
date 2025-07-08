@@ -8,6 +8,28 @@ Plug in only what you need, or forge your own.
 
 uv is recommended for installation, since it's faster than pip.
 
-You must install PyTorch on your own based on your CUDA version.
+First, create a virtual enviroment:
+
+`uv venv blade`
+
+Then, activate the enviroment:
+
+`source blade/bin/activate`
+
+Then, you must install PyTorch on your own based on your CUDA version:
 
 `uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128`
+
+Then, install dependencies:
+
+`uv sync`
+
+Finally, install the package locally in your enviroment:
+
+`uv pip install -e . --no-build-isolation`
+
+You should be all done!
+
+## Usage
+
+You can find example usage scripts inside examples folder.
