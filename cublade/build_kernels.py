@@ -9,7 +9,7 @@ from cublade.utils.path_utils import get_base_paths
 ALL_PATHS: dict[Path] = get_base_paths()
 
 KERNELS: dict = {
-    "avg_pool_1d": os.path.join(ALL_PATHS["KERNELS_PATH"] , "pooling" , "avg_pool_1d.cu"),
+    "avg_pool_1d": os.path.join(ALL_PATHS["KERNELS_PATH"], "cuda", "avg_pool_1d.cu"),
     # Other kernel paths can be added here
 }
 
