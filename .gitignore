@@ -3,6 +3,7 @@
 
 /blade
 /tests
+/.vscode
 
 ### C++ ###
 # Prerequisites

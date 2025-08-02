@@ -1,4 +1,12 @@
-# 🗡️ cuBlade — Modular CUDA kernel library
+# cuBlade: Modular CUDA kernel library
+
+## Updates
+
+Aug 3: Triton Tiled Matrix Multiplication Kernel
+
+* Achieved 44 TFLOPS with RTX 3070 Ti, with FP16 and FP8 precisions (FP8 needs SM89 and above for NVIDIA).
+* Supports both NVIDIA CUDA and AMD ROCm GPUs
+* See `/examples` and try the kernel yourself
 
 A growing toolbox of GPU blades:
 from matmul to softmax, each operator is hand-tuned, lightweight, and production-ready.
