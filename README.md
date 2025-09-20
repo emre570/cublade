@@ -2,8 +2,8 @@
 
 ## Updates
 
-* **Nov 11** – Triton matmul now supports FP32/FP16/BF16/FP8/INT8 through a unified wrapper, with optional autotune bypass for manual configs.
-* **Nov 11** – Added Rich-based benchmarking script (`examples/matmul_simple.py`) that compares Triton against `torch.matmul`, reports TFLOPS/error, and skips FP8 when hardware is missing.
+* **Sep 20** – Triton matmul now supports FP32/FP16/BF16/FP8/INT8 through a unified wrapper, with optional autotune bypass for manual configs.
+* **Sep 20** – Added Rich-based benchmarking script (`examples/matmul_simple.py`) that compares Triton against `torch.matmul`, reports TFLOPS/error, and skips FP8 when hardware is missing.
 * **Aug 3** – Triton tiled matmul achieved 44 TFLOPS on RTX 3070 Ti and supports both CUDA and ROCm backends.
 
 A growing toolbox of GPU blades:
