@@ -2,11 +2,9 @@
 
 ## Updates
 
-Aug 3: Triton Tiled Matrix Multiplication Kernel
-
-* Achieved 44 TFLOPS with RTX 3070 Ti, with FP16 and FP8 precisions (FP8 needs SM89 and above for NVIDIA).
-* Supports both NVIDIA CUDA and AMD ROCm GPUs
-* See `/examples` and try the kernel yourself
+* **Nov 11** – Triton matmul now supports FP32/FP16/BF16/FP8/INT8 through a unified wrapper, with optional autotune bypass for manual configs.
+* **Nov 11** – Added Rich-based benchmarking script (`examples/matmul_simple.py`) that compares Triton against `torch.matmul`, reports TFLOPS/error, and skips FP8 when hardware is missing.
+* **Aug 3** – Triton tiled matmul achieved 44 TFLOPS on RTX 3070 Ti and supports both CUDA and ROCm backends.
 
 A growing toolbox of GPU blades:
 from matmul to softmax, each operator is hand-tuned, lightweight, and production-ready.

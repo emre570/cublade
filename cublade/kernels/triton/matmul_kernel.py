@@ -4,19 +4,20 @@ import triton.language as tl
 from cublade.kernels.triton.activations import leaky_relu
 from cublade.benchmark.triton_configs_checkers import get_autotune_config
 
-@triton.autotune(
-    configs=get_autotune_config(),
-    key=['M', 'N', 'K'],
-)
+AUTOTUNE_CONFIGS = get_autotune_config()
+
 @triton.jit
 def matmul_kernel(a_ptr, b_ptr, c_ptr,
                   M, N, K,
                   stride_am, stride_ak,
                   stride_bk, stride_bn,
                   stride_cm, stride_cn,
+                  # meta parameters 
                   BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
                   GROUP_M: tl.constexpr,
-                  ACTIVATION: tl.constexpr):
+                  ACTIVATION: tl.constexpr,
+                  C_DTYPE: tl.constexpr, 
+                  ACC_DTYPE: tl.constexpr, ACC_IS_FLOAT: tl.constexpr):
     """Kernel for compute Matrix Multiplication of given two A and B matrices.
     A shape must be: (M, K)
     B shape must be: (K, N)
@@ -57,18 +58,19 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr,
     offs_am = (pid_m * BLOCK_M + tl.arange(0, BLOCK_M)) % M
     offs_bn = (pid_n * BLOCK_N + tl.arange(0, BLOCK_N)) % N
     offs_k = tl.arange(0, BLOCK_K)
+    
     # Assign tile's pointers since this is tiled matmul
     a_ptrs = a_ptr + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
     b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
     
     # Compute block of C matrix with iterating tiles over main matrix
     # For higher accuracy, dot product accumulates as FP32, then converted back to FP16.
-    accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    accumulator = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_DTYPE)
     for k in range(0, tl.cdiv(K, BLOCK_K)):
         # Load the next block of A and B, generate a mask by checking the K dimension.
         # If it is out of bounds, set it to 0.
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_K, other=0.0)
+        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_K, other=0)
+        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_K, other=0)
         # We accumulate along the K dimension.
         accumulator = tl.dot(a, b, accumulator)
         # Advance the ptrs to the next K block.
@@ -77,9 +79,9 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr,
         
     # Can fuse activation functions too, for now we have leaky relu.
     # Other activations are WIP.
-    if ACTIVATION == "leaky_relu":
+    if (ACTIVATION == "leaky_relu" and ACC_IS_FLOAT):
         accumulator = leaky_relu(accumulator)
-    c = accumulator.to(tl.float16)
+    c = accumulator.to(C_DTYPE)
     
     # Write the block of output matrix C with masks.
     offs_cm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
@@ -88,4 +90,10 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr,
     c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
     tl.store(c_ptrs, c, mask=c_mask)
         
-    
+matmul_kernel_autotuned = triton.autotune(
+    configs=get_autotune_config(),
+    key=['M', 'N', 'K',
+         'ACC_DTYPE', 'C_DTYPE'],
+)(matmul_kernel)
+
+__all__ = ['matmul_kernel', 'matmul_kernel_autotuned']
