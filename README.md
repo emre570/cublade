@@ -2,10 +2,15 @@
 
 ## Updates
 
-* **Sep 20** – Triton matmul now supports FP32/FP16/BF16/FP8/INT8 through a unified wrapper, with optional autotune bypass for manual configs.
-* **Sep 20** – Added Rich-based benchmarking script (`examples/matmul_simple.py`) that compares Triton against `torch.matmul`, reports TFLOPS/error, and skips FP8 when hardware is missing.
-* **Aug 3** – Triton tiled matmul achieved 44 TFLOPS on RTX 3070 Ti and supports both CUDA and ROCm backends.
+### **Sep 20-21** 
+#### Quantizations and Precisions Update!
+* Introduced `QuantizedTensor` and high-level int8 quantize/dequant helpers as `cublade.quantization` with a new `examples/quant_dequant_int8.py` walkthrough.
 
+* Triton matmul now supports FP32/FP16/BF16/FP8/INT8 through a unified wrapper, with optional autotune bypass for manual configs.
+
+* Added Rich-based benchmarking script (`examples/matmul_simple.py`) that compares Triton against `torch.matmul`, reports TFLOPS/error, and skips FP8 when hardware is missing.
+
+## Description
 A growing toolbox of GPU blades:
 from matmul to softmax, each operator is hand-tuned, lightweight, and production-ready.
 Plug in only what you need, or forge your own.
