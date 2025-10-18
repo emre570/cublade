@@ -11,3 +11,4 @@ class QuantizedTensor:
     axis: int
     group_size: Optional[int]
     dtype: torch.dtype
+    original_dtype: torch.dtype

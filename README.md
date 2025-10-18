@@ -2,6 +2,16 @@
 
 ## Updates
 
+### **Oct 18-19**
+
+#### W8A16 Quantization with LLM.int8 Support!
+
+* Introduced `quantize_model()` high-level API for model quantization
+* `cubladeW8A16LinearLayer`: INT8 weights, FP16 activations with ~18% memory savings
+* Optional outlier handling (LLM.int8 style) for quality preservation
+* Two new examples: `w8a16_toy_model.py` (simple) and `w8a16_llm_inference.py` (full LLM benchmark)
+* See `examples/quantization/` for usage
+
 ### **Sep 20-21**
 
 #### Quantizations and Precisions Update!

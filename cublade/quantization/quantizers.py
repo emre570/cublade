@@ -1,6 +1,8 @@
 import torch
+import torch.nn as nn
+from typing import Optional, List
 
-from .utils import _qrange, compute_params
+from .utils import _qrange, compute_params, replace_linear_layers
 from .tensor import QuantizedTensor
 
 # ---------------------------
@@ -154,4 +156,86 @@ def quantize_tensor(
     else:
         raise ValueError(f"Unsupported mode '{mode}'.")
     
-    return QuantizedTensor(q, scale, zp, mode, ch_axis, group_size, dtype)
+    return QuantizedTensor(q, scale, zp, mode, ch_axis, group_size, dtype, x.dtype)
+
+QUANT_LAYER_REGISTRY = {}
+
+def _init_registry():
+    """Lazy initialization to avoid circular imports."""
+    if not QUANT_LAYER_REGISTRY:
+        from .linear import cuBladeW8A16LinearLayer
+        QUANT_LAYER_REGISTRY["w8a16"] = cuBladeW8A16LinearLayer
+
+def quantize_model(
+    model: nn.Module,
+    quant_type: str = "w8a16",
+    target_modules: Optional[List[str]] = None,
+    exclude_modules: Optional[List[str]] = None,
+    inplace: bool = True,
+    **quant_kwargs,
+):
+    """
+    Quantize a model's linear layers to reduce memory footprint.
+    
+    Replaces `nn.Linear` layers with quantized equivalents based on
+    the specified quantization scheme.
+    
+    Args:
+        model: PyTorch model to quantize
+        quant_type: Quantization scheme - one of:
+            - "w8a16": INT8 weights, FP16 activations (default)
+            - "w8a8": INT8 weights, INT8 activations (future)
+            - "w4a16": INT4 weights, FP16 activations (future)
+        target_modules: List of module names to quantize. If None, quantize
+            all Linear layers except those in `exclude_modules`.
+            Example: ["q_proj", "k_proj", "v_proj"] for attention only.
+        exclude_modules: List of module names to skip.
+            Example: ["lm_head", "embed_tokens"]
+        inplace: If True, modify model in place. Otherwise, return a copy.
+        **quant_kwargs: Additional options passed to the quantized layer:
+            - For W8A16:
+                - handle_outliers (bool): Enable LLM.int8 outlier handling
+                - outlier_threshold (float): Threshold for outlier detection
+                - dtype (torch.dtype): Activation dtype
+            
+    Returns:
+        Quantized model (same object if inplace=True)
+        
+    Example:
+        >>> from transformers import AutoModelForCausalLM
+        >>> from cublade.quantization import quantize_model
+        >>> 
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+        >>> model = quantize_model(
+        ...     model,
+        ...     quant_type="w8a16",
+        ...     exclude_modules=["lm_head"]
+        ... )
+        >>> # Model is now quantized, use normally
+        >>> output = model(input_ids)
+    """
+    _init_registry()
+    
+    if quant_type not in QUANT_LAYER_REGISTRY:
+        available = ", ".join(QUANT_LAYER_REGISTRY.keys())
+        raise ValueError(
+            f"Unknown quant_type '{quant_type}'. Available: {available}"
+        )
+    
+    if not inplace:
+        from copy import deepcopy
+        model = deepcopy(model)
+    
+    # Get the appropriate quantized layer class
+    quant_layer_cls = QUANT_LAYER_REGISTRY[quant_type]
+    
+    # Perform replacement
+    replace_linear_layers(
+        model,
+        target_class=quant_layer_cls,
+        target_modules=target_modules,
+        exclude_modules=exclude_modules,
+        quant_kwargs=quant_kwargs,
+    )
+    
+    return model

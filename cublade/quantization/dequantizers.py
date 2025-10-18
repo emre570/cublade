@@ -84,10 +84,10 @@ def dequantize_tensor(
     """High-level entry point that consumes ``QuantizedTensor`` metadata."""
     if q.mode in ('tensor', 'channel'):
         if q.dtype in (torch.int8, torch.uint8):
-            return dequantize_int8(q.data, q.scale, q.zero_point)
+            return dequantize_int8(q.data, q.scale, q.zero_point).to(q.original_dtype)
     elif q.mode == 'group':
         if q.dtype in (torch.int8, torch.uint8):
-            return dequantize_per_group_int8(q.data, q.scale, q.zero_point, q.group_size, q.axis)
+            return dequantize_per_group_int8(q.data, q.scale, q.zero_point, q.group_size, q.axis).to(q.original_dtype)
 
     raise ValueError(f"Unsupported mode '{q.mode}' for dequantization.")
     

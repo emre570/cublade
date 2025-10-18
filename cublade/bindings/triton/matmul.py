@@ -16,7 +16,14 @@ PREC_TORCH_TO_TRITON = {
 
 def matmul(A: torch.Tensor, B: torch.Tensor, activation: str="", override_config=None, use_autotune=True):
     assert A.shape[1] == B.shape[0], f"Incompatible dimensions"
-    assert A.is_contiguous() and B.is_contiguous(), "Matrix A and B must be contiguous"
+    
+    A = A.contiguous()
+    B = B.contiguous()
+    # Device preconditions: Triton backend requires CUDA tensors on the same device
+    if A.device.type != "cuda" or B.device.type != "cuda":
+        raise ValueError(f"Triton matmul requires CUDA tensors. Got A on {A.device}, B on {B.device}.")
+    if A.device != B.device:
+        raise ValueError(f"A and B must be on the same device. Got A on {A.device}, B on {B.device}.")
     
     M, K = A.shape
     N = B.shape[1]
