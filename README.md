@@ -2,6 +2,24 @@
 
 ## Updates
 
+### **Jan 7**
+
+#### WMMA Multi-Precision GEMM Kernel
+
+* New CUDA WMMA kernel with async pipeline and double buffering
+* Supports all 16x16x16 fragment precision combinations:
+  - `float16 -> float32` (default)
+  - `float16 -> float16`
+  - `bfloat16 -> float32`
+  - `int8 -> int32`
+  - `uint8 -> int32`
+* Python binding with automatic dtype dispatch
+* Benchmark results on RTX 3090:
+  - int8: **96 TFLOPS** (exact precision)
+  - float16->float16: **88 TFLOPS** (beats cuBLAS at large sizes)
+* New example: `examples/kernels/wmma_simple.py`
+* Improved install script with CUDA auto-detection
+
 ### **Oct 18-19**
 
 #### W8A16 Quantization with LLM.int8 Support!
@@ -28,30 +46,38 @@ Plug in only what you need, or forge your own.
 
 ## Installation
 
-uv is recommended for installation, since it's faster than pip.
+### Quick Install (Recommended)
 
-First, create a virtual enviroment:
+The install script auto-detects your CUDA version and installs everything:
 
-`uv venv blade`
+```bash
+./install.sh
+```
 
-Then, activate the enviroment:
+This creates a `.venv`, installs PyTorch with matching CUDA, and builds all CUDA kernels.
 
-`source blade/bin/activate`
+### Manual Install
 
-Then, you must install PyTorch on your own based on your CUDA version:
+If you prefer manual control:
 
-`uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128`
+```bash
+# Create and activate venv
+uv venv && source .venv/bin/activate
 
-Then, install dependencies:
+# Install PyTorch for your CUDA version (check yours with: nvcc --version)
+uv pip install torch --index-url https://download.pytorch.org/whl/cu130  # CUDA 13.0
+# Other options: cu118, cu121, cu124, cu128
 
-`uv sync`
-
-Finally, install the package locally in your enviroment:
-
-`uv pip install -e . --no-build-isolation`
-
-You should be all done!
+# Install cublade (builds CUDA kernels)
+uv pip install -e . --no-build-isolation
+```
 
 ## Usage
 
-You can find example usage scripts inside examples folder.
+Activate the environment:
+
+```bash
+source .venv/bin/activate
+```
+
+Example usage scripts are in the `examples/` folder.

@@ -11,7 +11,7 @@ KERNELS_PATH.mkdir(exist_ok=True)
 
 KERNELS = {
     "avg_pool_1d": [str(CUDA_SRC_PATH / "avg_pool_1d.cu")],
-    "wmma_matmul": [str(CUDA_SRC_PATH / "wmma_matmul.cu")],
+    "wmma": [str(CUDA_SRC_PATH / "wmma.cu")],
 }
 
 OUTPUTS: dict = {}
