@@ -31,7 +31,8 @@ def matmul(A: torch.Tensor, B: torch.Tensor, activation: str="", override_config
     c_dtype = None
     acc_dtype = None
     acc_is_float = None
-    
+    input_dtype = PREC_TORCH_TO_TRITON.get(A.dtype)
+
     if A.dtype == B.dtype:
         #FP32 check
         if (A.dtype == torch.float32):
@@ -91,6 +92,7 @@ def matmul(A: torch.Tensor, B: torch.Tensor, activation: str="", override_config
             ACTIVATION=activation,
             C_DTYPE=c_dtype,
             ACC_DTYPE=acc_dtype, ACC_IS_FLOAT=acc_is_float,
+            INPUT_DTYPE=input_dtype,
             num_warps=num_warps,
             num_stages=num_stages,
         )
@@ -104,7 +106,8 @@ def matmul(A: torch.Tensor, B: torch.Tensor, activation: str="", override_config
             *strides,
             ACTIVATION=activation,
             C_DTYPE=c_dtype,
-            ACC_DTYPE=acc_dtype, ACC_IS_FLOAT=acc_is_float
+            ACC_DTYPE=acc_dtype, ACC_IS_FLOAT=acc_is_float,
+            INPUT_DTYPE=input_dtype,
         )
         return C
 
@@ -122,6 +125,7 @@ def matmul(A: torch.Tensor, B: torch.Tensor, activation: str="", override_config
         ACTIVATION=activation,
         C_DTYPE=c_dtype,
         ACC_DTYPE=acc_dtype, ACC_IS_FLOAT=acc_is_float,
+        INPUT_DTYPE=input_dtype,
         num_warps=num_warps,
         num_stages=num_stages,
     )

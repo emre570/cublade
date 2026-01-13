@@ -12,12 +12,13 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr,
                   stride_am, stride_ak,
                   stride_bk, stride_bn,
                   stride_cm, stride_cn,
-                  # meta parameters 
+                  # meta parameters
                   BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
                   GROUP_M: tl.constexpr,
                   ACTIVATION: tl.constexpr,
-                  C_DTYPE: tl.constexpr, 
-                  ACC_DTYPE: tl.constexpr, ACC_IS_FLOAT: tl.constexpr):
+                  C_DTYPE: tl.constexpr,
+                  ACC_DTYPE: tl.constexpr, ACC_IS_FLOAT: tl.constexpr,
+                  INPUT_DTYPE: tl.constexpr = None):
     """Kernel for compute Matrix Multiplication of given two A and B matrices.
     A shape must be: (M, K)
     B shape must be: (K, N)
@@ -69,10 +70,17 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr,
     for k in range(0, tl.cdiv(K, BLOCK_K)):
         # Load the next block of A and B, generate a mask by checking the K dimension.
         # If it is out of bounds, set it to 0.
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_K, other=0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_K, other=0)
+        # Use 0.0 for float types (including FP8), 0 for integer types (INT8).
+        a_mask = offs_k[None, :] < K - k * BLOCK_K
+        b_mask = offs_k[:, None] < K - k * BLOCK_K
+        if ACC_IS_FLOAT:
+            a = tl.load(a_ptrs, mask=a_mask, other=0.0)
+            b = tl.load(b_ptrs, mask=b_mask, other=0.0)
+        else:
+            a = tl.load(a_ptrs, mask=a_mask, other=0)
+            b = tl.load(b_ptrs, mask=b_mask, other=0)
         # We accumulate along the K dimension.
-        accumulator = tl.dot(a, b, accumulator)
+        accumulator = tl.dot(a, b, accumulator, out_dtype=ACC_DTYPE)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_K * stride_ak
         b_ptrs += BLOCK_K * stride_bk
@@ -93,7 +101,7 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr,
 matmul_kernel_autotuned = triton.autotune(
     configs=get_autotune_config(),
     key=['M', 'N', 'K',
-         'ACC_DTYPE', 'C_DTYPE'],
+         'ACC_DTYPE', 'C_DTYPE', 'INPUT_DTYPE'],
 )(matmul_kernel)
 
 __all__ = ['matmul_kernel', 'matmul_kernel_autotuned']

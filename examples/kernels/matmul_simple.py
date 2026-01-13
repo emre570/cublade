@@ -15,6 +15,7 @@ from cublade.bindings.triton import matmul
 DEVICE = triton.runtime.driver.active.get_active_torch_device()
 CONSOLE = Console()
 TORCH_HAS_FP8 = hasattr(torch, "float8_e5m2")
+TORCH_HAS_SCALED_MM = hasattr(torch, "_scaled_mm")
 
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
@@ -31,6 +32,28 @@ def fp8_supported() -> bool:
     # Hopper+ (sm90) is required for accelerated FP8 kernels.
     major, _ = capability
     return major >= 9
+
+
+def torch_fp8_matmul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Perform FP8 matmul using torch._scaled_mm with unit scaling.
+
+    torch._scaled_mm requires:
+    - Second matrix in column-major format (transposed)
+    - Scale tensors for both inputs
+    - Typically float8_e4m3fn format (we convert if needed)
+    """
+    # Convert to e4m3fn if using e5m2 (e4m3fn has better _scaled_mm support)
+    if a.dtype == torch.float8_e5m2:
+        a = a.to(torch.float16).to(torch.float8_e4m3fn)
+        b = b.to(torch.float16).to(torch.float8_e4m3fn)
+    # Unit scale tensors (no scaling applied)
+    scale_a = torch.ones(1, device=a.device, dtype=torch.float32)
+    scale_b = torch.ones(1, device=b.device, dtype=torch.float32)
+    # torch._scaled_mm expects B in column-major, so we pass B.t() and it computes A @ B
+    # The function signature is: _scaled_mm(A, B_transposed.t()) = A @ B
+    # We need B to be (K, N) but in column-major, which is equivalent to (N, K).t()
+    b_col_major = b.t().contiguous().t()
+    return torch._scaled_mm(a, b_col_major, scale_a=scale_a, scale_b=scale_b, out_dtype=torch.float16)
 
 
 def compute_tflops(ms: float, m: int, n: int, k: int) -> float:
@@ -95,7 +118,13 @@ def benchmark_case(
     error = float("nan")
     torch_ms = float("nan")
     torch_tflops = float("nan")
-    if dtype != torch.int8:
+    if dtype == torch.float8_e5m2 and TORCH_HAS_SCALED_MM:
+        # Use native FP8 matmul via torch._scaled_mm for fair comparison
+        torch_ms = do_bench(lambda: torch_fp8_matmul(a, b), warmup=20, rep=100)
+        torch_output = torch_fp8_matmul(a, b)
+        error = max_abs_error(triton_output, torch_output)
+        torch_tflops = compute_tflops(torch_ms, m, n, k)
+    elif dtype != torch.int8:
         torch_ms = do_bench(lambda: torch.matmul(ref_a, ref_b), warmup=20, rep=100)
         torch_output = torch.matmul(ref_a, ref_b)
         error = max_abs_error(triton_output, torch_output)
