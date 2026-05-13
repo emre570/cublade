@@ -6,12 +6,12 @@ from .quantizers import quantize_tensor, quantize_model
 from .outlier_utils import detect_outlier_columns, separate_outliers, split_weights_by_outliers
 
 __all__ = [
-    "quantize_model",                # High-level API
+    "quantize_model",
     "quantize_tensor",
     "dequantize_tensor",
     "QuantizedTensor",
     "cuBladeW8A16LinearLayer",
-    "detect_outlier_columns",        # Outlier utilities
+    "detect_outlier_columns",
     "separate_outliers",
     "split_weights_by_outliers",
 ]

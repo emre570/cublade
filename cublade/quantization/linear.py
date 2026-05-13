@@ -36,32 +36,39 @@ class cuBladeW8A16LinearLayer(nn.Module):
     def quantize(self, weight_fp: torch.Tensor):
         """
         Quantize the weight matrix.
-        
+
         If handle_outliers=True, detects outlier columns and stores them separately
         in FP16, only quantizing the normal columns to INT8.
+
+        The CUDA INT8 path requires CUDA + contiguous input, so the weight is
+        moved here before dispatch. Inner-stride alignment (in_features %
+        (16 / element_size) == 0) is also required - rare nn.Linear shapes
+        that don't satisfy it will raise from the kernel.
         """
         if self.handle_outliers:
             # LLM.int8 approach: detect and separate outlier columns
             weight_normal, weight_outlier, normal_cols, outlier_cols = separate_outliers(
                 weight_fp, threshold=self.outlier_threshold
             )
-            
+
             # Store outlier information
             self.outlier_weights = weight_outlier  # Keep outliers in original dtype
             self.normal_cols = torch.tensor(normal_cols, dtype=torch.long)
             self.outlier_cols = torch.tensor(outlier_cols, dtype=torch.long)
-            
-            # Quantize only the normal columns
+
+            # Quantize only the normal columns (force CUDA + contiguous).
             qt = quantize_tensor(
-                weight_normal, scheme="symmetric", dtype=torch.int8, mode="channel", ch_axis=0
+                weight_normal.cuda().contiguous(),
+                scheme="symmetric", dtype=torch.int8, mode="channel", ch_axis=0,
             )
-            
-            # Resize int8_weights buffer to match normal columns only
+
+            # Resize int8_weights buffer to match normal columns only.
             self.int8_weights = qt.data
         else:
-            # Standard quantization: quantize entire weight matrix
+            # Standard quantization: quantize entire weight matrix.
             qt = quantize_tensor(
-                weight_fp, scheme="symmetric", dtype=torch.int8, mode="channel", ch_axis=0
+                weight_fp.cuda().contiguous(),
+                scheme="symmetric", dtype=torch.int8, mode="channel", ch_axis=0,
             )
             self.int8_weights.copy_(qt.data)
         

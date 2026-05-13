@@ -1,10 +1,5 @@
 [build-system]
-requires = [
-    "setuptools",
-    "wheel",
-    "ninja",
-    "torch",
-]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -14,8 +9,6 @@ description = "A growing toolbox of GPU kernels. Sharp like a blade."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "setuptools",
-    "wheel",
     "ninja",
     "numpy",
     "pandas",
@@ -29,7 +22,16 @@ dependencies = [
     "accelerate>=1.12.0",
 ]
 
-# uv-specific: torch comes from PyTorch index, everything else from PyPI
+[tool.setuptools.packages.find]
+include = ["cublade*"]
+
+[tool.setuptools.package-data]
+"cublade" = [
+    "kernels/cuda/**/*.cu",
+    "kernels/cuda/**/*.cuh",
+    "kernels/cuda/**/*.h",
+]
+
 [tool.uv.sources]
 torch = { index = "pytorch" }
 

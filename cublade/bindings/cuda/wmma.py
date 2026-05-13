@@ -1,13 +1,21 @@
 # cublade/bindings/cuda/wmma.py
 
 import torch
-from cublade._kernels import cublade_wmma as _cpp_wmma
+
+from cublade._loader import CSRC, load_cuda_module
+
+_SOURCES = [CSRC / "wmma.cu"]
+_MODULE_NAME = "cublade_wmma"
+
+
+def _module():
+    return load_cuda_module(name=_MODULE_NAME, sources=_SOURCES)
 
 
 def wmma_gemm(
     A: torch.Tensor,
     B: torch.Tensor,
-    acc_dtype: torch.dtype | None = None
+    acc_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """
     WMMA-based GEMM with multi-precision support (16x16x16 fragments).
@@ -32,4 +40,4 @@ def wmma_gemm(
     Note:
         Dimensions M, N, K must be multiples of 16 (WMMA tile constraint).
     """
-    return _cpp_wmma.wmma_gemm(A, B, acc_dtype)
+    return _module().wmma_gemm(A, B, acc_dtype)

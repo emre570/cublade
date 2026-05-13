@@ -1,5 +1,7 @@
 #!/bin/bash
-# Detect CUDA version and install cublade with matching PyTorch
+# Detect CUDA version and install cublade with matching PyTorch.
+# CUDA kernels are NOT compiled here - they JIT-compile on first use
+# (cached at ~/.cache/torch_extensions/, so subsequent runs are instant).
 
 set -e
 
@@ -40,10 +42,10 @@ source .venv/bin/activate
 echo "Installing PyTorch for CUDA $CUDA_TAG..."
 uv pip install torch --index-url "$TORCH_INDEX"
 
-# Install cublade (builds CUDA kernels)
-echo "Installing cublade and building kernels..."
-uv pip install -e . --no-build-isolation
+# Install cublade (metadata-only, no kernel compilation here)
+echo "Installing cublade (metadata only - kernels JIT-compile on first use)..."
+uv pip install -e .
 
 echo ""
-echo "Done! Activate with: source .venv/bin/activate"
-
+echo "Done. Activate with: source .venv/bin/activate"
+echo "First call to a CUDA kernel takes ~5-30s (compile); subsequent calls are instant."

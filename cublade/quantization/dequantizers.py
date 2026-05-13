@@ -1,93 +1,75 @@
 import torch
 
 from .tensor import QuantizedTensor
-# ---------------------------
-# Helper
-# ---------------------------
-def _prep_group_params(scale: torch.Tensor, zero_point: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    if scale.ndim == 1:
-        scale = scale.unsqueeze(1)
-    if zero_point.ndim == 1:
-        zero_point = zero_point.unsqueeze(1)
-    return scale, zero_point
+from cublade.bindings.cuda.dequantize_fp8 import (
+    dequantize_per_tensor_fp8 as _cuda_dequant_fp8_tensor,
+)
+from cublade.bindings.cuda.dequantize_int8 import (
+    dequantize_per_tensor_int8 as _cuda_dequant_int8_tensor,
+    dequantize_per_channel_int8 as _cuda_dequant_int8_channel,
+    dequantize_per_group_int8 as _cuda_dequant_int8_group,
+)
 
-# ---------------------------
-# Dequantize
-# ---------------------------
-def dequantize_int8(
-    qt: torch.Tensor,
-    scale: torch.Tensor,
-    zero_point: torch.Tensor,
-):
-    """Inverse of affine INT8/UINT8 quantization.
 
-    Parameters
-    ----------
-    qt : torch.Tensor
-        Quantized tensor.
-    scale : torch.Tensor
-        Scaling factors broadcastable to ``qt``.
-    zero_point : torch.Tensor
-        Zero-point offsets broadcastable to ``qt``.
+_INT8_DTYPES = (torch.int8,)
+_FP8_DTYPES = (torch.float8_e4m3fn,)
 
-    Returns
-    -------
-    torch.Tensor
-        Floating-point approximation of the original tensor.
-    """
-    return scale * (qt.to(torch.float32) - zero_point)
 
-def dequantize_per_group_int8(
-    qt: torch.Tensor,
-    scale: torch.Tensor,
-    zero_point: torch.Tensor,
-    group_size: int,
-    axis: int = -1,
-):
-    """Undo symmetric per-group quantization.
+def _require_cuda_dequant_input(
+    q: torch.Tensor, out_dtype: torch.dtype, *, what: str
+) -> None:
+    if not q.is_cuda:
+        raise ValueError(f"{what}: tensor must be on CUDA, got device={q.device}")
+    if not q.is_contiguous():
+        raise ValueError(f"{what}: tensor must be contiguous")
+    if q.dtype not in _INT8_DTYPES + _FP8_DTYPES:
+        raise ValueError(
+            f"{what}: q.dtype must be torch.int8 or torch.float8_e4m3fn, got {q.dtype}"
+        )
+    if out_dtype not in (torch.float16, torch.bfloat16):
+        raise ValueError(
+            f"{what}: out_dtype must be float16 or bfloat16, got {out_dtype}"
+        )
 
-    Parameters
-    ----------
-    qt : torch.Tensor
-        Quantized tensor. The target ``axis`` must have been grouped by
-        ``group_size`` during quantization.
-    scale : torch.Tensor
-        Per-group scale factors.
-    zero_point : torch.Tensor
-        Per-group zero points.
-    group_size : int
-        Number of elements in each quantized group.
-    axis : int, default -1
-        Axis that was grouped during quantization.
-
-    Returns
-    -------
-    torch.Tensor
-        Dequantized tensor matching the shape of ``qt``.
-    """
-    q_perm = qt.movedim(axis, -1).contiguous()
-    *lead, C = q_perm.shape
-    assert C % group_size == 0, "group_size must evenly divide the target axis."
-    qg = q_perm.view(-1, group_size)
-    
-    scale, zero_point = _prep_group_params(scale, zero_point)
-    xg = dequantize_int8(qg, scale, zero_point)
-    x_perm = xg.view(*lead, C)
-    return x_perm.movedim(-1, axis)
 
 # ---------------------------
 # High-level wrapper
 # ---------------------------
-def dequantize_tensor(
-    q: QuantizedTensor
-):
+def dequantize_tensor(qt: QuantizedTensor):
     """High-level entry point that consumes ``QuantizedTensor`` metadata."""
-    if q.mode in ('tensor', 'channel'):
-        if q.dtype in (torch.int8, torch.uint8):
-            return dequantize_int8(q.data, q.scale, q.zero_point).to(q.original_dtype)
-    elif q.mode == 'group':
-        if q.dtype in (torch.int8, torch.uint8):
-            return dequantize_per_group_int8(q.data, q.scale, q.zero_point, q.group_size, q.axis).to(q.original_dtype)
+    _require_cuda_dequant_input(qt.data, qt.original_dtype, what="dequantize_tensor")
 
-    raise ValueError(f"Unsupported mode '{q.mode}' for dequantization.")
-    
+    if qt.dtype == torch.float8_e4m3fn:
+        if qt.mode != "tensor":
+            raise NotImplementedError(
+                "FP8 dequant only supports mode='tensor'"
+            )
+        return _cuda_dequant_fp8_tensor(qt.data, qt.scale, qt.original_dtype)
+
+    if qt.dtype == torch.int8:
+        if qt.mode == "tensor":
+            return _cuda_dequant_int8_tensor(qt.data, qt.scale, qt.original_dtype)
+        if qt.mode == "channel":
+            if qt.axis != 0:
+                raise NotImplementedError(
+                    "INT8 channel dequant requires axis=0; got axis=" + str(qt.axis)
+                )
+            return _cuda_dequant_int8_channel(qt.data, qt.scale, qt.original_dtype)
+        if qt.mode == "group":
+            if qt.group_size is None:
+                raise ValueError("INT8 group dequant needs qt.group_size")
+            q_perm = qt.data.movedim(qt.axis, -1).contiguous()
+            lead = q_perm.shape[:-1]
+            F = q_perm.shape[-1]
+            if F % qt.group_size != 0:
+                raise ValueError(
+                    f"group_size {qt.group_size} must evenly divide axis length {F}"
+                )
+            q_grouped = q_perm.view(-1, qt.group_size).contiguous()
+            y_grouped = _cuda_dequant_int8_group(
+                q_grouped, qt.scale, qt.group_size, qt.original_dtype
+            )
+            return y_grouped.view(*lead, F).movedim(-1, qt.axis).contiguous()
+        raise ValueError(f"Unsupported INT8 mode '{qt.mode}'")
+
+    raise ValueError(f"No dequant kernel registered for dtype={qt.dtype}")
